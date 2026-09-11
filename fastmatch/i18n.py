@@ -10,6 +10,8 @@ _language = "en"
 _reverse: dict[str, str] = {}
 _qt_translator = None
 ZH = {
+    "Rectilinear select": "直角多边形选区",
+    "Rectilinear (right-angle polygon) select: click to drop vertices (edges snap horizontal/vertical); click the first vertex or double-click / Enter to close, Esc to cancel.": "直角多边形选区：点击添加顶点，边缘自动保持水平或垂直；点击首个顶点、双击或按 Enter 闭合，按 Esc 取消。",
     "&File": "文件(&F)", "&View": "视图(&V)", "&Tools": "工具(&T)",
     "&Theme": "主题(&T)", "&Engine": "计算引擎(&E)", "&Help": "帮助(&H)",
     "Language": "语言 / Language", "&About FastMatch": "关于 FastMatch(&A)",

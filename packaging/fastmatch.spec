@@ -25,6 +25,11 @@ a = Analysis([str(root / 'scripts' / 'desktop_entry.py')], pathex=[str(root)],
              binaries=[], datas=datas, hiddenimports=hidden,
              excludes=['pytest', 'torchvision', 'torchaudio', 'matplotlib',
                        'IPython', 'notebook', 'tensorboard'], noarchive=False)
+if sys.platform == 'win32':
+    # Qt uses the unversioned ICU API provided by Windows 10+. A developer's
+    # PATH can contain an incompatible ICU from unrelated tools (e.g. Poppler).
+    # Bundling that DLL shadows the OS API and makes QtCore fail to import.
+    a.binaries = [entry for entry in a.binaries if Path(entry[0]).name.lower() != 'icuuc.dll']
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='FastMatch',
           debug=False, bootloader_ignore_signals=False, strip=False, upx=False,

@@ -266,9 +266,9 @@ class MainWindow(QMainWindow):
         self._act_rectilinear = QAction(tr("Rectilinear select"), self)
         self._act_rectilinear.setCheckable(True)
         self._act_rectilinear.setToolTip(
-            "Rectilinear (right-angle polygon) select: click to drop vertices "
+            tr("Rectilinear (right-angle polygon) select: click to drop vertices "
             "(edges snap horizontal/vertical); click the first vertex or double-click "
-            "/ Enter to close, Esc to cancel."
+            "/ Enter to close, Esc to cancel.")
         )
         self._act_rectilinear.toggled.connect(self._on_rectilinear_toggled)
         tb.addAction(self._act_rectilinear)
@@ -836,7 +836,7 @@ class MainWindow(QMainWindow):
             if self._act_mode.isChecked():
                 self._act_mode.blockSignals(True)
                 self._act_mode.setChecked(False)
-                self._act_mode.setText("Select mode")
+                self._act_mode.setText(tr("Select mode"))
                 self._act_mode.blockSignals(False)
             self._viewport.set_mode(ImageViewport.Mode.RECTILINEAR)
         else:
