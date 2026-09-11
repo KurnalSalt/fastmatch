@@ -35,6 +35,10 @@ Box = tuple[int, int, int, int]  # (x, y, w, h), half-open image px
 #: Candidates verified per batch (bounds the gathered patch memory).
 _VERIFY_CHUNK = 50_000
 
+#: max_results for the proposal search: every candidate must reach the
+#: verification step; the user's cap applies to the final list only.
+_UNCAPPED = 1 << 30
+
 
 def _inverse_orientations() -> dict[str, str]:
     probe = np.arange(6).reshape(2, 3)
@@ -205,7 +209,7 @@ def match_examples(
     """
     image = matcher.host_image
     mean, pos, neg, pos_boxes, neg_boxes = prepare_examples(image, positives, negatives)
-    cands = matcher.match(mean, replace(params, max_results=0), exclude_box=None,
+    cands = matcher.match(mean, replace(params, max_results=_UNCAPPED), exclude_box=None,
                           cancel=cancel, progress=progress)
     if cancel is not None and cancel():
         return []
