@@ -767,7 +767,7 @@ class Matcher:
         for m in ordered:
             if all(_match_iou(m, k) <= nms_iou for k in kept):
                 kept.append(m)
-            if len(kept) >= params.max_results:
+            if params.max_results > 0 and len(kept) >= params.max_results:
                 break
         return kept
 
@@ -2370,7 +2370,7 @@ class Matcher:
         scale = scale[keep]
 
         # Top-K by score desc (§D.5 step 5).
-        if scores.numel() > params.max_results:
+        if params.max_results > 0 and scores.numel() > params.max_results:
             top = torch.argsort(scores, descending=True)[: params.max_results]
         else:
             top = torch.argsort(scores, descending=True)

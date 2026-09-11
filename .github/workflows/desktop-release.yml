@@ -1,0 +1,61 @@
+name: Desktop release builds
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*-desktop*']
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x64-cpu
+          - os: macos-15
+            target: macos-arm64
+          - os: macos-15-intel
+            target: macos-x64
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies (Intel Mac)
+        if: matrix.target == 'macos-x64'
+        run: python -m pip install -r requirements-app.txt -c packaging/constraints-macos-intel.txt torch pyinstaller pytest
+      - name: Install dependencies
+        if: matrix.target != 'macos-x64'
+        run: python -m pip install -r requirements-app.txt torch==2.9.1 pyinstaller pytest
+      - name: Test
+        run: python -m pytest tests/test_device.py tests/test_new_options.py tests/test_app.py tests/test_engine.py tests/test_memory.py -q
+      - name: Package
+        run: python -m PyInstaller --noconfirm packaging/fastmatch.spec
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath dist/FastMatch/FastMatch.exe -ArgumentList '--smoke-test --device cpu' -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw 'Packaged smoke test failed' }
+      - name: Smoke test (macOS)
+        if: runner.os == 'macOS'
+        run: dist/FastMatch.app/Contents/MacOS/FastMatch --smoke-test --device cpu
+      - name: Archive
+        shell: bash
+        run: |
+          mkdir -p release
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            ditto -c -k --sequesterRsrc --keepParent dist/FastMatch.app release/FastMatch-${{ matrix.target }}.zip
+          else
+            python -c "import shutil; shutil.make_archive('release/FastMatch-${{ matrix.target }}', 'zip', 'dist', 'FastMatch')"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FastMatch-${{ matrix.target }}
+          path: release/*.zip
+          compression-level: 0
+          retention-days: 30

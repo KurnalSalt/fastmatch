@@ -24,6 +24,8 @@ at module top-level beyond what PySide6 already requires.
 
 from __future__ import annotations
 
+from .i18n import tr
+
 import dataclasses
 import os
 import tempfile
@@ -46,7 +48,7 @@ from PySide6.QtWidgets import (
 )
 
 from .calibration import Calibration
-from .device import device_banner_text, resolve_device
+from .device import device_banner_text, resolve_device, gpu_backend
 from .document import ImageDocument
 from .memory import MemoryEntry
 from .about import AboutDialog
@@ -78,7 +80,7 @@ class MainWindow(QMainWindow):
         from .controller import MatchController
         from .viewport import ImageViewport
 
-        self.setWindowTitle("FastMatch")
+        self.setWindowTitle(tr("FastMatch"))
         self._doc = doc
 
         # Resolve the device once for the banner + the params panel. The
@@ -169,7 +171,7 @@ class MainWindow(QMainWindow):
         dock_layout.addWidget(self._banner)
         dock_layout.addStretch(1)
 
-        self._dock = QDockWidget("Search", self)
+        self._dock = QDockWidget(tr("Search"), self)
         self._dock.setWidget(dock_body)
         self._dock.setAllowedAreas(
             Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
@@ -184,7 +186,7 @@ class MainWindow(QMainWindow):
         self._memory = MemoryPanel(self)
         if self._doc is not None:
             self._memory.set_source(self._doc.path, self._viewport.image_size())
-        self._memory_dock = QDockWidget("Memory", self)
+        self._memory_dock = QDockWidget(tr("Memory"), self)
         self._memory_dock.setWidget(self._memory)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._memory_dock)
 
@@ -193,15 +195,15 @@ class MainWindow(QMainWindow):
         self._build_menus()
 
         # --- Status bar ----------------------------------------------------
-        self._cursor_label = QLabel("Cursor: (-, -)", self)
-        self._area_label = QLabel("", self)        # physical area of the selection
-        self._count_label = QLabel("0 matches", self)
+        self._cursor_label = QLabel(tr("Cursor: (-, -)"), self)
+        self._area_label = QLabel(tr(""), self)        # physical area of the selection
+        self._count_label = QLabel(tr("0 matches"), self)
         self._progress = QProgressBar(self)
         self._progress.setRange(0, 100)
         self._progress.setMaximumWidth(180)
         self._progress.setVisible(False)
         # Left-aligned focus-mode hint (always shown; text reflects on/off state).
-        self._focus_label = QLabel("Press Space to enter focus mode", self)
+        self._focus_label = QLabel(tr("Press Space to enter focus mode"), self)
         sb = self.statusBar()
         sb.addWidget(self._focus_label)            # left side
         sb.addPermanentWidget(self._cursor_label)  # right side
@@ -225,7 +227,7 @@ class MainWindow(QMainWindow):
         if self._doc is None:
             self._act_close_image.setEnabled(False)
             self._params_panel.set_run_enabled(False)
-            self._count_label.setText("No image")
+            self._count_label.setText(tr("No image"))
         else:
             # A CLI-launched image is "opened" too — record it in the recent list.
             self._record_recent(self._doc.path)
@@ -236,15 +238,15 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ build
     def _build_toolbar(self) -> None:
         """Create the toolbar actions (Open, mode toggle, Fit, Clear, Self-test)."""
-        tb = QToolBar("Main", self)
+        tb = QToolBar(tr("Main"), self)
         tb.setObjectName("mainToolbar")
         self.addToolBar(tb)
 
         # Toolbar uses sentence case ("Open image…") to match its siblings (Select
         # mode / Clear matches); the File menu gets its own Title-Case "Open Image…"
         # action below (menu convention: Close Image, Open Memory…).
-        self._act_open = QAction("Open image…", self)
-        self._act_open.setToolTip("Open an image to search (PNG / JPEG / TIFF / BMP).")
+        self._act_open = QAction(tr("Open image…"), self)
+        self._act_open.setToolTip(tr("Open an image to search (PNG / JPEG / TIFF / BMP)."))
         self._act_open.triggered.connect(self._on_open)
         tb.addAction(self._act_open)
 
@@ -253,15 +255,15 @@ class MainWindow(QMainWindow):
         # Mode toggle: checkable; unchecked == Select, checked == Pan. The label
         # names the CURRENT mode (see _on_mode_toggled), so it starts "Select mode"
         # to match the unchecked/Select startup state.
-        self._act_mode = QAction("Select mode", self)
+        self._act_mode = QAction(tr("Select mode"), self)
         self._act_mode.setCheckable(True)
-        self._act_mode.setToolTip("Toggle between Select (draw region) and Pan (drag to move).")
+        self._act_mode.setToolTip(tr("Toggle between Select (draw region) and Pan (drag to move)."))
         self._act_mode.toggled.connect(self._on_mode_toggled)
         tb.addAction(self._act_mode)
 
         # Rectilinear select: an orthogonal-polygon region tool. Checkable and
         # mutually exclusive with the Select/Pan toggle (each unchecks the other).
-        self._act_rectilinear = QAction("Rectilinear select", self)
+        self._act_rectilinear = QAction(tr("Rectilinear select"), self)
         self._act_rectilinear.setCheckable(True)
         self._act_rectilinear.setToolTip(
             "Rectilinear (right-angle polygon) select: click to drop vertices "
@@ -271,18 +273,18 @@ class MainWindow(QMainWindow):
         self._act_rectilinear.toggled.connect(self._on_rectilinear_toggled)
         tb.addAction(self._act_rectilinear)
 
-        self._act_fit = QAction("Fit", self)
+        self._act_fit = QAction(tr("Fit"), self)
         self._act_fit.setShortcut(QKeySequence("F"))  # F = zoom-to-fit
-        self._act_fit.setToolTip("Zoom to fit the whole image (F).")
+        self._act_fit.setToolTip(tr("Zoom to fit the whole image (F)."))
         self._act_fit.triggered.connect(self._viewport.fit_in_view)
         tb.addAction(self._act_fit)
 
         tb.addSeparator()  # view group | results group
 
-        self._act_clear = QAction("Clear matches", self)
+        self._act_clear = QAction(tr("Clear matches"), self)
         self._act_clear.setToolTip(
-            "Clear the result boxes and the current selection (draw a new region to "
-            "search again)."
+            tr("Clear the result boxes and the current selection (draw a new region to "
+            "search again).")
         )
         self._act_clear.triggered.connect(self._on_clear_matches)
         tb.addAction(self._act_clear)
@@ -291,26 +293,26 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
 
         # Measurement tools (also listed under the Tools menu).
-        self._act_calibrate = QAction("Calibrate", self)
+        self._act_calibrate = QAction(tr("Calibrate"), self)
         self._act_calibrate.setToolTip(
-            "Drag a line of known physical length, then enter that length to set the "
+            tr("Drag a line of known physical length, then enter that length to set the "
             "pixel↔physical scale (uses the longer of the horizontal/vertical span; "
-            "the first point becomes the physical origin)."
+            "the first point becomes the physical origin).")
         )
         self._act_calibrate.triggered.connect(self._on_calibrate_tool)
         tb.addAction(self._act_calibrate)
 
-        self._act_measure = QAction("Measure", self)
-        self._act_measure.setToolTip("Drag a line on the image to measure its physical distance.")
+        self._act_measure = QAction(tr("Measure"), self)
+        self._act_measure.setToolTip(tr("Drag a line on the image to measure its physical distance."))
         self._act_measure.triggered.connect(self._on_measure_tool)
         tb.addAction(self._act_measure)
 
         # Self-test is a diagnostic, not a primary tool — the action is created here
         # (toolbar build runs before the menus) but lives in the Help menu, not the
         # toolbar (see _build_help_menu).
-        self._act_selftest = QAction("Self-test", self)
+        self._act_selftest = QAction(tr("Self-test"), self)
         self._act_selftest.setToolTip(
-            "Generate a labelled sample, search one motif, and report recall."
+            tr("Generate a labelled sample, search one motif, and report recall.")
         )
         self._act_selftest.triggered.connect(self._on_self_test)
 
@@ -318,54 +320,54 @@ class MainWindow(QMainWindow):
         """Menu bar — File (image + memory ops) and View (box appearance)."""
         # Keep references on self: a menu held only by a local can have its C++
         # object GC-deleted by shiboken (-> "QMenu already deleted" on access).
-        file_menu = self._file_menu = self.menuBar().addMenu("&File")
+        file_menu = self._file_menu = self.menuBar().addMenu(tr("&File"))
         # Image operations. A dedicated Title-Case menu action (the toolbar keeps
         # its own sentence-case "Open image…"); both trigger _on_open.
-        self._act_open_menu = QAction("Open Image…", self)
+        self._act_open_menu = QAction(tr("Open Image…"), self)
         self._act_open_menu.triggered.connect(self._on_open)
         file_menu.addAction(self._act_open_menu)
-        self._act_close_image = QAction("Close Image", self)
-        self._act_close_image.setToolTip("Close the current image and clear the view.")
+        self._act_close_image = QAction(tr("Close Image"), self)
+        self._act_close_image.setToolTip(tr("Close the current image and clear the view."))
         self._act_close_image.triggered.connect(self._on_close_image)
         file_menu.addAction(self._act_close_image)
         # Recently opened images (most-recent first; persisted across sessions).
-        self._recent_menu = file_menu.addMenu("Open &Recent")
+        self._recent_menu = file_menu.addMenu(tr("Open &Recent"))
         self._rebuild_recent_menu()
         file_menu.addSeparator()
         # Memory operations (backed by the Memory panel's file methods).
-        act_open_mem = QAction("Open Memory…", self)
+        act_open_mem = QAction(tr("Open Memory…"), self)
         act_open_mem.triggered.connect(self._memory.open_memory)
         file_menu.addAction(act_open_mem)
-        act_save_mem = QAction("Save Memory", self)
+        act_save_mem = QAction(tr("Save Memory"), self)
         act_save_mem.setShortcut(QKeySequence.StandardKey.Save)  # Ctrl+S
         act_save_mem.triggered.connect(self._memory.save_memory)
         file_menu.addAction(act_save_mem)
-        act_save_mem_as = QAction("Save Memory As…", self)
+        act_save_mem_as = QAction(tr("Save Memory As…"), self)
         act_save_mem_as.setShortcut(QKeySequence.StandardKey.SaveAs)
         act_save_mem_as.triggered.connect(self._memory.save_memory_as)
         file_menu.addAction(act_save_mem_as)
-        act_close_mem = QAction("Close Memory", self)
-        act_close_mem.setToolTip("Clear all memory entries.")
+        act_close_mem = QAction(tr("Close Memory"), self)
+        act_close_mem.setToolTip(tr("Clear all memory entries."))
         act_close_mem.triggered.connect(self._memory.close_memory)
         file_menu.addAction(act_close_mem)
         file_menu.addSeparator()
-        act_quit = QAction("Quit", self)
+        act_quit = QAction(tr("Quit"), self)
         act_quit.setShortcut(QKeySequence.StandardKey.Quit)
         act_quit.triggered.connect(self.close)
         file_menu.addAction(act_quit)
 
-        view_menu = self._view_menu = self.menuBar().addMenu("&View")
+        view_menu = self._view_menu = self.menuBar().addMenu(tr("&View"))
         view_menu.addAction(self._act_fit)  # Fit (F), also on the toolbar
         view_menu.addSeparator()
 
-        boxes_menu = view_menu.addMenu("Match &boxes")
+        boxes_menu = view_menu.addMenu(tr("Match &boxes"))
 
         # Line width: an exclusive set of presets (cosmetic device px).
-        width_menu = boxes_menu.addMenu("Line &width")
+        width_menu = boxes_menu.addMenu(tr("Line &width"))
         self._box_width_group = QActionGroup(self)
         self._box_width_group.setExclusive(True)
         for px in (1, 2, 3, 4, 6):
-            act = QAction(f"{px} px", self, checkable=True)
+            act = QAction(tr(f"{px} px"), self, checkable=True)
             act.setChecked(px == 1)  # default 1 px
             act.triggered.connect(lambda _checked, w=px: self._viewport.set_box_line_width(w))
             self._box_width_group.addAction(act)
@@ -374,11 +376,11 @@ class MainWindow(QMainWindow):
         # Score histogram (above the threshold slider): tunable bin count, an
         # exclusive set of presets. "Hidden" here in the View menu rather than the
         # always-visible params panel.
-        bins_menu = view_menu.addMenu("Histogram &bins")
+        bins_menu = view_menu.addMenu(tr("Histogram &bins"))
         self._hist_bins_group = QActionGroup(self)
         self._hist_bins_group.setExclusive(True)
         for nbins in _HIST_BIN_PRESETS:
-            act = QAction(f"{nbins} bins", self, checkable=True)
+            act = QAction(tr(f"{nbins} bins"), self, checkable=True)
             act.setChecked(nbins == _HIST_BINS)  # default
             act.triggered.connect(
                 lambda _checked, n=nbins: self._params_panel.set_histogram_bins(n)
@@ -387,10 +389,10 @@ class MainWindow(QMainWindow):
             bins_menu.addAction(act)
 
         # XOR-with-background toggle.
-        self._act_box_xor = QAction("&XOR with background", self, checkable=True)
+        self._act_box_xor = QAction(tr("&XOR with background"), self, checkable=True)
         self._act_box_xor.setToolTip(
-            "Draw box outlines XORed with the pixels underneath, so they stay "
-            "visible on any background."
+            tr("Draw box outlines XORed with the pixels underneath, so they stay "
+            "visible on any background.")
         )
         self._act_box_xor.toggled.connect(self._viewport.set_box_xor)
         boxes_menu.addAction(self._act_box_xor)
@@ -400,40 +402,70 @@ class MainWindow(QMainWindow):
         # toggleViewAction is a checkable show/hide that stays in sync automatically.
         view_menu.addSeparator()
         act_dock_search = self._dock.toggleViewAction()
-        act_dock_search.setText("&Search panel")
+        act_dock_search.setText(tr("&Search panel"))
         view_menu.addAction(act_dock_search)
         act_dock_memory = self._memory_dock.toggleViewAction()
-        act_dock_memory.setText("&Memory panel")
+        act_dock_memory.setText(tr("&Memory panel"))
         view_menu.addAction(act_dock_memory)
 
         self._build_tools_menu()
         self._build_theme_menu()
         self._build_engine_menu()
+        self._build_cpu_menu()
+        self._build_language_menu()
 
         # Help menu (last, by convention) — home of the Self-test diagnostic, which
         # was demoted off the primary toolbar.
-        self._help_menu = self.menuBar().addMenu("&Help")
+        self._help_menu = self.menuBar().addMenu(tr("&Help"))
         self._help_menu.addAction(self._act_selftest)
         self._help_menu.addSeparator()
-        self._act_about = QAction("&About FastMatch", self)
+        self._act_about = QAction(tr("&About FastMatch"), self)
         self._act_about.setMenuRole(QAction.MenuRole.AboutRole)  # -> app menu on macOS
         self._act_about.triggered.connect(self._on_about)
         self._help_menu.addAction(self._act_about)
+
+    def _build_language_menu(self) -> None:
+        from .i18n import language, set_language, refresh_ui
+        menu = self._language_menu = self.menuBar().addMenu(tr("Language"))
+        group = self._language_group = QActionGroup(self)
+        group.setExclusive(True)
+        for key, label in (("zh", "简体中文"), ("en", "English")):
+            action = QAction(label, self, checkable=True)
+            action.setChecked(language() == key)
+            action.triggered.connect(lambda _checked, code=key: set_language(code))
+            group.addAction(action)
+            menu.addAction(action)
+        QTimer.singleShot(0, lambda: refresh_ui(self))
+
+    def _build_cpu_menu(self) -> None:
+        from .cpu import available_threads, configure_threads
+        import torch
+        total = available_threads()
+        menu = self._cpu_menu = self._engine_menu.addMenu(tr("CPU threads"))
+        group = self._cpu_group = QActionGroup(self)
+        group.setExclusive(True)
+        for count in sorted({1, min(4, total), max(1, total // 2), total}):
+            label = f"{count} threads" + (" (all cores)" if count == total else "")
+            action = QAction(label, self, checkable=True)
+            action.setChecked(count == torch.get_num_threads())
+            action.triggered.connect(lambda _checked, n=count: configure_threads(n, persist=True))
+            group.addAction(action)
+            menu.addAction(action)
 
     def _build_tools_menu(self) -> None:
         """&Tools menu — physical-scale calibration and the measuring ruler.
 
         Reuses the Calibrate / Measure actions created on the toolbar.
         """
-        tools_menu = self._tools_menu = self.menuBar().addMenu("&Tools")
+        tools_menu = self._tools_menu = self.menuBar().addMenu(tr("&Tools"))
         tools_menu.addAction(self._act_calibrate)
         tools_menu.addAction(self._act_measure)
 
         tools_menu.addSeparator()
-        self._act_clear_measure = QAction("Clear measurement", self)
+        self._act_clear_measure = QAction(tr("Clear measurement"), self)
         self._act_clear_measure.triggered.connect(self._on_clear_measurement)
         tools_menu.addAction(self._act_clear_measure)
-        self._act_clear_calib = QAction("Clear calibration", self)
+        self._act_clear_calib = QAction(tr("Clear calibration"), self)
         self._act_clear_calib.triggered.connect(self._on_clear_calibration)
         tools_menu.addAction(self._act_clear_calib)
 
@@ -444,7 +476,7 @@ class MainWindow(QMainWindow):
         checked. Selecting one re-themes the whole app live and remembers the
         choice for next launch.
         """
-        theme_menu = self._theme_menu = self.menuBar().addMenu("&Theme")
+        theme_menu = self._theme_menu = self.menuBar().addMenu(tr("&Theme"))
         self._theme_group = QActionGroup(self)
         self._theme_group.setExclusive(True)
         self._theme_actions: dict[str, QAction] = {}
@@ -478,11 +510,13 @@ class MainWindow(QMainWindow):
         the user can never select an unavailable backend. The entry matching the
         current :attr:`_device_pref` starts checked.
         """
-        engine_menu = self._engine_menu = self.menuBar().addMenu("&Engine")
+        engine_menu = self._engine_menu = self.menuBar().addMenu(tr("&Engine"))
         self._engine_group = QActionGroup(self)
         self._engine_group.setExclusive(True)
 
         cuda_available = resolve_device("cuda").type == "cuda"
+        rocm_available = cuda_available and gpu_backend() == "rocm"
+        cuda_available = cuda_available and not rocm_available
         # (preference-string, label, tooltip, enabled).
         specs = (
             ("auto", "&Auto (prefer GPU)",
@@ -490,14 +524,18 @@ class MainWindow(QMainWindow):
             ("cuda", "&CUDA (GPU)",
              "Force the CUDA GPU backend." if cuda_available
              else "No working CUDA device was detected on this machine."),
+            ("rocm", "&ROCm (AMD GPU)",
+             "Use AMD ROCm / HIP." if rocm_available else "Requires compatible AMD drivers and ROCm PyTorch."),
             ("cpu", "C&PU",
              "Force the CPU backend (slower, but always available)."),
         )
         self._engine_actions: dict[str, QAction] = {}
         for key, label, tip in specs:
             act = QAction(label, self, checkable=True)
-            act.setToolTip(tip)
+            act.setToolTip(tr(tip))
             if key == "cuda" and not cuda_available:
+                act.setEnabled(False)
+            if key == "rocm" and not rocm_available:
                 act.setEnabled(False)
             act.setChecked(key == self._device_pref)
             act.triggered.connect(lambda _checked, k=key: self._on_select_engine(k))
@@ -522,7 +560,7 @@ class MainWindow(QMainWindow):
             # Busy worker parked: undo the radio selection and tell the user.
             self._engine_actions[previous].setChecked(True)
             QMessageBox.warning(
-                self, "Busy", "A search is still finishing; please wait and try again."
+                self, tr("Busy"), tr("A search is still finishing; please wait and try again.")
             )
             return
 
@@ -534,7 +572,7 @@ class MainWindow(QMainWindow):
         self._params = dataclasses.replace(
             self._params_panel.current_params(), device=self._device_pref
         )
-        self._banner.setText(device_banner_text(self._resolved_device))
+        self._banner.setText(tr(device_banner_text(self._resolved_device)))
 
         # Build a fresh controller bound to the new device, then reset the busy UI.
         self._install_new_controller()
@@ -581,9 +619,9 @@ class MainWindow(QMainWindow):
         """Open a file dialog, load the chosen image, and rebuild around it."""
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Open image",
+            tr("Open image"),
             "",
-            "Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;All files (*)",
+            tr("Images (*.png *.jpg *.jpeg *.tif *.tiff *.bmp);;All files (*)"),
         )
         if not path:
             return
@@ -593,7 +631,7 @@ class MainWindow(QMainWindow):
         try:
             doc = load_image(path)
         except Exception as exc:  # surface load failures rather than crash
-            QMessageBox.critical(self, "Open failed", f"Could not load image:\n{exc}")
+            QMessageBox.critical(self, tr("Open failed"), tr(f"Could not load image:\n{exc}"))
             return
         self._swap_document(doc)
 
@@ -644,7 +682,7 @@ class MainWindow(QMainWindow):
             parent = Path(p).parent.name
             label = f"{Path(p).name}  —  {parent}" if parent else Path(p).name
             act = QAction(label, self)
-            act.setToolTip(p)
+            act.setToolTip(tr(p))
             act.triggered.connect(lambda _checked=False, path=p: self._open_recent(path))
             menu.addAction(act)
         menu.addSeparator()
@@ -655,7 +693,7 @@ class MainWindow(QMainWindow):
         """Open an image chosen from the recent list (validating it still exists)."""
         if not Path(path).is_file():
             QMessageBox.warning(
-                self, "Open Recent", f"This image is no longer available:\n{path}"
+                self, tr("Open Recent"), tr(f"This image is no longer available:\n{path}")
             )
             theme.settings().setValue(
                 _RECENT_KEY, [p for p in self._load_recent() if p != path]
@@ -667,7 +705,7 @@ class MainWindow(QMainWindow):
         try:
             doc = load_image(path)
         except Exception as exc:
-            QMessageBox.critical(self, "Open failed", f"Could not load image:\n{exc}")
+            QMessageBox.critical(self, tr("Open failed"), tr(f"Could not load image:\n{exc}"))
             return
         self._swap_document(doc)
 
@@ -689,16 +727,16 @@ class MainWindow(QMainWindow):
         self._last_mask = None
         self._all_matches = []
         self._calibration = None  # calibration is image-specific
-        self._area_label.setText("")
+        self._area_label.setText(tr(""))
         self._params_panel.set_run_enabled(False)
         self._params_panel.set_match_count(0)
         self._params_panel.set_score_histogram([])
         self._memory.set_source("", (0, 0))
         self._progress.setValue(0)
         self._progress.setVisible(False)
-        self._count_label.setText("No image")
+        self._count_label.setText(tr("No image"))
         self._act_close_image.setEnabled(False)  # nothing to close now
-        self.statusBar().showMessage("Image closed.", 4000)
+        self.statusBar().showMessage(tr("Image closed."), 4000)
 
     def _teardown_controller(self) -> bool:
         """Shut down the current controller; park it (alive) if still busy.
@@ -745,7 +783,7 @@ class MainWindow(QMainWindow):
         """
         if not self._teardown_controller():
             QMessageBox.warning(
-                self, "Busy", "A search is still finishing; please wait and try again."
+                self, tr("Busy"), tr("A search is still finishing; please wait and try again.")
             )
             return
 
@@ -755,7 +793,7 @@ class MainWindow(QMainWindow):
         self._last_mask = None
         self._all_matches = []
         self._calibration = None  # calibration is per-image; drop it on swap
-        self._area_label.setText("")
+        self._area_label.setText(tr(""))
         self._params_panel.set_run_enabled(False)  # new image -> no selection yet
         self._viewport.clear_matches()
         self._viewport.clear_template()
@@ -768,7 +806,7 @@ class MainWindow(QMainWindow):
         self._progress.setValue(0)
         self._progress.setVisible(False)
         self._viewport.fit_in_view()
-        self._count_label.setText("0 matches")
+        self._count_label.setText(tr("0 matches"))
         self._params_panel.set_match_count(0)
         self._params_panel.set_score_histogram([])
         # Re-seed the Memory panel's source header so entries added after the
@@ -787,7 +825,7 @@ class MainWindow(QMainWindow):
             self._act_rectilinear.blockSignals(False)
         mode = ImageViewport.Mode.PAN if checked else ImageViewport.Mode.SELECT
         self._viewport.set_mode(mode)
-        self._act_mode.setText("Pan mode" if checked else "Select mode")
+        self._act_mode.setText(tr("Pan mode" if checked else "Select mode"))
 
     def _on_rectilinear_toggled(self, checked: bool) -> None:
         """Enter the rectilinear-polygon select tool (or fall back to box Select)."""
@@ -812,7 +850,7 @@ class MainWindow(QMainWindow):
         self._last_mask = None
         self._all_matches = []
         self._params_panel.set_run_enabled(False)  # nothing to Run anymore
-        self._count_label.setText("0 matches")
+        self._count_label.setText(tr("0 matches"))
         self._params_panel.set_match_count(0)
         self._params_panel.set_score_histogram([])
 
@@ -826,7 +864,7 @@ class MainWindow(QMainWindow):
         is no completed search to save.
         """
         if self._last_rect is None or not self._all_matches:
-            self.statusBar().showMessage("Run a match first to add to Memory.", 6000)
+            self.statusBar().showMessage(tr("Run a match first to add to Memory."), 6000)
             return
         visible = [m for m in self._all_matches if m.score >= self._params.threshold]
         rect = self._last_rect
@@ -835,7 +873,7 @@ class MainWindow(QMainWindow):
         # NMS/feature params, ...) via the full MatchParams snapshot.
         entry = MemoryEntry(selection=sel, params=self._params, matches=list(visible))
         self._memory.add_entry(entry)
-        self.statusBar().showMessage(f"Added {len(visible)} matches to Memory.", 6000)
+        self.statusBar().showMessage(tr(f"Added {len(visible)} matches to Memory."), 6000)
 
     def _on_revisit_entry(self, entry: object) -> None:
         """Recall a saved entry: restore its reference box and matches (revisit).
@@ -867,10 +905,10 @@ class MainWindow(QMainWindow):
             shown = self._viewport.visible_match_count()
         except Exception:
             shown = len(matches)
-        self._count_label.setText(self._count_text(shown, matches, 0.0))
+        self._count_label.setText(tr(self._count_text(shown, matches, 0.0)))
         self._params_panel.set_match_count(shown)
         self.statusBar().showMessage(
-            f"Revisiting memory entry: showing {len(matches)} saved matches.", 6000
+            tr(f"Revisiting memory entry: showing {len(matches)} saved matches."), 6000
         )
 
     def _on_memory_loaded(self, store: object) -> None:
@@ -888,9 +926,9 @@ class MainWindow(QMainWindow):
         if os.path.exists(source):
             reply = QMessageBox.question(
                 self,
-                "Open source image?",
-                "These saved searches were recorded against a different image:\n"
-                f"{source}\n\nOpen it so the saved boxes line up?",
+                tr("Open source image?"),
+                tr("These saved searches were recorded against a different image:\n"
+                f"{source}\n\nOpen it so the saved boxes line up?"),
             )
             if reply == QMessageBox.StandardButton.Yes:
                 from .loader import load_image
@@ -899,14 +937,14 @@ class MainWindow(QMainWindow):
                     doc = load_image(source)
                 except Exception as exc:  # surface load failures rather than crash
                     QMessageBox.critical(
-                        self, "Open failed", f"Could not load image:\n{exc}"
+                        self, tr("Open failed"), tr(f"Could not load image:\n{exc}")
                     )
                     return
                 self._swap_document(doc)
         else:
             self.statusBar().showMessage(
-                "Loaded memory entries were recorded for a different image "
-                f"({source}), which was not found; saved boxes may not line up.",
+                tr("Loaded memory entries were recorded for a different image "
+                f"({source}), which was not found; saved boxes may not line up."),
                 10000,
             )
 
@@ -921,13 +959,13 @@ class MainWindow(QMainWindow):
         if self._auto_run:
             self._controller.request(rect, self._params, self._last_mask)
         else:
-            self.statusBar().showMessage("Selection set — press Run to search.", 4000)
+            self.statusBar().showMessage(tr("Selection set — press Run to search."), 4000)
 
     # ------------------------------------------------- calibration / measure
     def _enter_tool(self, mode) -> None:
         """Enter a one-shot measurement tool, remembering the mode to restore."""
         if self._doc is None:
-            self.statusBar().showMessage("Open an image first.", 4000)
+            self.statusBar().showMessage(tr("Open an image first."), 4000)
             return
         from .viewport import ImageViewport
 
@@ -948,7 +986,7 @@ class MainWindow(QMainWindow):
         self._enter_tool(ImageViewport.Mode.CALIBRATE)
         if self._doc is not None:
             self.statusBar().showMessage(
-                "Calibrate: drag a line along a span of known physical length.", 6000
+                tr("Calibrate: drag a line along a span of known physical length."), 6000
             )
 
     def _on_measure_tool(self) -> None:
@@ -956,39 +994,39 @@ class MainWindow(QMainWindow):
 
         self._enter_tool(ImageViewport.Mode.MEASURE)
         if self._doc is not None:
-            self.statusBar().showMessage("Measure: drag a line to measure its distance.", 6000)
+            self.statusBar().showMessage(tr("Measure: drag a line to measure its distance."), 6000)
 
     def _on_calibration_picked(self, p1: QPointF, p2: QPointF) -> None:
         """Two points picked: ask for the physical length and set the scale."""
         self._exit_tool()
         ref_px = Calibration.reference_span((p1.x(), p1.y()), (p2.x(), p2.y()))
         if ref_px < 1.0:
-            self.statusBar().showMessage("Calibration span too short — try a longer drag.", 5000)
+            self.statusBar().showMessage(tr("Calibration span too short — try a longer drag."), 5000)
             self._viewport.clear_calibration()
             return
         default = self._calibration.unit if self._calibration is not None else "mm"
         text, ok = QInputDialog.getText(
             self,
-            "Calibrate scale",
-            f"The longer span is {ref_px:.1f} px.\n"
-            "Enter its physical length (e.g. '5.36 mm'):",
+            tr("Calibrate scale"),
+            tr(f"The longer span is {ref_px:.1f} px.\n"
+            "Enter its physical length (e.g. '5.36 mm'):"),
             text=f"1 {default}",
         )
         if not ok or not text.strip():
             return
         length, unit = self._parse_length(text, default)
         if length is None or length <= 0:
-            self.statusBar().showMessage("Could not read a positive length from that input.", 5000)
+            self.statusBar().showMessage(tr("Could not read a positive length from that input."), 5000)
             return
         try:
             cal = Calibration.from_two_points((p1.x(), p1.y()), (p2.x(), p2.y()), length, unit)
         except ValueError:
-            self.statusBar().showMessage("Degenerate calibration; please try again.", 5000)
+            self.statusBar().showMessage(tr("Degenerate calibration; please try again."), 5000)
             return
         self._set_calibration(cal)
         self.statusBar().showMessage(
-            f"Calibrated: {length:g} {unit} over {ref_px:.1f} px "
-            f"→ {cal.scale:.4g} {unit}/px.",
+            tr(f"Calibrated: {length:g} {unit} over {ref_px:.1f} px "
+            f"→ {cal.scale:.4g} {unit}/px."),
             8000,
         )
 
@@ -1000,10 +1038,10 @@ class MainWindow(QMainWindow):
         px = math.hypot(p2.x() - p1.x(), p2.y() - p1.y())
         if self._calibration is not None:
             phys = self._calibration.format_length(px)
-            self.statusBar().showMessage(f"Distance: {phys}  ({px:.1f} px)", 0)
+            self.statusBar().showMessage(tr(f"Distance: {phys}  ({px:.1f} px)"), 0)
         else:
             self.statusBar().showMessage(
-                f"Distance: {px:.1f} px  (calibrate to show physical units)", 0
+                tr(f"Distance: {px:.1f} px  (calibrate to show physical units)"), 0
             )
 
     @staticmethod
@@ -1030,24 +1068,24 @@ class MainWindow(QMainWindow):
         """Show the physical area of the current selection (blank if not calibrated)."""
         if self._calibration is not None and self._last_rect is not None:
             self._area_label.setText(
-                "area " + self._calibration.format_area(self._last_rect.width(), self._last_rect.height())
+                tr("area " + self._calibration.format_area(self._last_rect.width(), self._last_rect.height()))
             )
         else:
-            self._area_label.setText("")
+            self._area_label.setText(tr(""))
 
     def _on_clear_measurement(self) -> None:
         self._viewport.clear_measurement()
-        self.statusBar().showMessage("Measurement cleared.", 3000)
+        self.statusBar().showMessage(tr("Measurement cleared."), 3000)
 
     def _on_clear_calibration(self) -> None:
         self._set_calibration(None)
         self._viewport.clear_calibration()
-        self.statusBar().showMessage("Calibration cleared.", 3000)
+        self.statusBar().showMessage(tr("Calibration cleared."), 3000)
 
     def _on_run(self) -> None:
         """Run the search on the current selection (the Run button / manual)."""
         if self._last_rect is None:
-            self.statusBar().showMessage("Draw a selection box first.", 4000)
+            self.statusBar().showMessage(tr("Draw a selection box first."), 4000)
             return
         self._controller.request(self._last_rect, self._params, self._last_mask)
 
@@ -1064,7 +1102,7 @@ class MainWindow(QMainWindow):
     def _on_focus_mode_changed(self, on: bool) -> None:
         """Update the left-aligned focus-mode hint in the status bar."""
         self._focus_label.setText(
-            "Focus mode — Space to exit" if on else "Press Space to enter focus mode"
+            tr("Focus mode — Space to exit" if on else "Press Space to enter focus mode")
         )
 
     def _on_cursor_pos(self, x: int, y: int) -> None:
@@ -1075,12 +1113,12 @@ class MainWindow(QMainWindow):
         """
         self._last_cursor = None if (x < 0 or y < 0) else (x, y)
         if self._last_cursor is None:
-            self._cursor_label.setText("Cursor: (-, -)")
+            self._cursor_label.setText(tr("Cursor: (-, -)"))
             return
         text = f"Cursor: ({x}, {y}) px"
         if self._calibration is not None:
             text += "   " + self._calibration.format_point(x, y)
-        self._cursor_label.setText(text)
+        self._cursor_label.setText(tr(text))
 
     # ------------------------------------------------------- controller events
     def _on_matches_ready(self, matches: object) -> None:
@@ -1096,7 +1134,7 @@ class MainWindow(QMainWindow):
         # Remember the engine's full result so threshold-only changes can refresh
         # the orientation breakdown without re-running the engine.
         self._all_matches = match_list
-        self._count_label.setText(self._count_text(shown, match_list, self._params.threshold))
+        self._count_label.setText(tr(self._count_text(shown, match_list, self._params.threshold)))
         self._params_panel.set_match_count(shown)
         # Feed the full (pre-threshold) score distribution to the slider histogram.
         self._params_panel.set_score_histogram([m.score for m in match_list])
@@ -1130,7 +1168,9 @@ class MainWindow(QMainWindow):
         return f"{base} — {' '.join(parts)}"
 
     def _on_busy_changed(self, busy: bool) -> None:
-        """Show/hide the determinate progress bar with engine busy state."""
+        """Show progress and prevent changing compute thread pools mid-search."""
+        if hasattr(self, "_cpu_menu"):
+            self._cpu_menu.setEnabled(not busy)
         self._progress.setVisible(busy)
         if busy:
             self._progress.setValue(0)
@@ -1141,7 +1181,7 @@ class MainWindow(QMainWindow):
 
     def _on_failed(self, message: str) -> None:
         """Surface an engine failure in the status bar (transient)."""
-        self.statusBar().showMessage(f"Match failed: {message}", 8000)
+        self.statusBar().showMessage(tr(f"Match failed: {message}"), 8000)
 
     # ----------------------------------------------------------- params events
     def _on_params_changed(self, params: object) -> None:
@@ -1166,7 +1206,7 @@ class MainWindow(QMainWindow):
         # Keep the count readout in sync with the new live filter.
         try:
             shown = self._viewport.visible_match_count()
-            self._count_label.setText(self._count_text(shown, self._all_matches, new.threshold))
+            self._count_label.setText(tr(self._count_text(shown, self._all_matches, new.threshold)))
             self._params_panel.set_match_count(shown)
         except Exception:
             pass
@@ -1216,13 +1256,13 @@ class MainWindow(QMainWindow):
         """
         if method not in CONV_METHODS:  # i.e. "features"
             self.statusBar().showMessage(
-                "Feature matching runs on the CPU via OpenCV (independent of the "
-                "engine GPU device).",
+                tr("Feature matching runs on the CPU via OpenCV (independent of the "
+                "engine GPU device)."),
                 10000,
             )
         else:
             dev = device_banner_text(self._resolved_device)
-            self.statusBar().showMessage(f"Method '{method}' — {dev}", 6000)
+            self.statusBar().showMessage(tr(f"Method '{method}' — {dev}"), 6000)
 
     # ------------------------------------------------------------- self-test
     def _on_self_test(self) -> None:
@@ -1236,9 +1276,9 @@ class MainWindow(QMainWindow):
         try:
             result = self._run_self_test()
         except Exception as exc:  # never let the self-test crash the app
-            QMessageBox.warning(self, "Self-test error", f"Self-test could not run:\n{exc}")
+            QMessageBox.warning(self, tr("Self-test error"), tr(f"Self-test could not run:\n{exc}"))
             return
-        QMessageBox.information(self, "Self-test", result)
+        QMessageBox.information(self, tr("Self-test"), result)
 
     def _run_self_test(self) -> str:
         """Execute the self-test and return a human-readable summary string."""
@@ -1309,9 +1349,7 @@ class MainWindow(QMainWindow):
             return
         self._cpu_notice_shown = True
         self.statusBar().showMessage(
-            "Running on CPU: no usable CUDA device found — matching may take "
-            "seconds to minutes on large images. Install the cu128 PyTorch build "
-            "for GPU acceleration.",
+            tr("Running on CPU: install a compatible AMD ROCm or NVIDIA CUDA PyTorch build for GPU acceleration."),
             15000,
         )
 

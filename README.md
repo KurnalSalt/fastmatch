@@ -1,5 +1,7 @@
 # FastMatch
 
+Windows 用户：双击 `FastMatch.exe` 启动。新增 AMD ROCm 后端，安装与 RDNA 1/2/3/4 兼容范围见 [Windows / ROCm 说明](WINDOWS_ROCM.md)。ROCm 环境请使用 `requirements-app.txt` 和 `requirements-rocm-windows.txt`，避免下方旧版安装命令替换 HIP PyTorch。
+
 ![FastMatch](docs/top.png)
 
 FastMatch is a single-process PySide6 desktop app for exploring **gigapixel

@@ -1,30 +1,30 @@
-"""Device resolution and a launch-time CUDA canary.
-
-The hard reality on this machine: ``torch.cuda.is_available()`` can return True
-while the installed wheel ships no kernel for the GPU's compute capability (the
-RTX 5060 is Blackwell / sm_120 and needs a cu128+ build). Such a mismatch only
-explodes when the *first real kernel* launches. So we gate CUDA on both
-``is_available()`` **and** a tiny canary matmul, and fall back to CPU on any
-failure — the app must always run, just slower on CPU.
-"""
+"""Detect CUDA / ROCm and validate real GPU kernels before enabling acceleration."""
 
 from __future__ import annotations
 
+import logging
 import torch
+import torch.nn.functional as F
+
+def gpu_backend() -> str:
+    """ROCm exposes its devices through torch.cuda, too."""
+    return "rocm" if getattr(torch.version, "hip", None) else "cuda"
 
 
 def canary_kernel_ok() -> bool:
-    """Return True iff a trivial CUDA kernel actually executes.
-
-    Catches the sm_120-wheel/driver mismatch that ``is_available()`` misses
-    (e.g. ``CUDA error: no kernel image is available for execution``).
-    """
+    """Check matrix, convolution and FFT support on the installed GPU runtime."""
     try:
         a = torch.ones(8, 8, device="cuda")
         # Force a real kernel launch + a device->host sync so a lazy failure surfaces here.
-        _ = (a @ a).sum().item()
-        return True
-    except Exception:
+        if (a @ a).sum().item() != 512:
+            return False
+        conv = F.conv2d(a[None, None], torch.ones(1, 1, 3, 3, device="cuda"))
+        if conv.sum().item() != 324:
+            return False
+        restored = torch.fft.irfft2(torch.fft.rfft2(a), s=a.shape)
+        return bool(torch.allclose(restored, a))
+    except Exception as exc:
+        logging.getLogger(__name__).warning("GPU probe failed: %s", exc)
         return False
 
 
@@ -33,12 +33,20 @@ def resolve_device(pref: str = "auto") -> torch.device:
 
     Args:
         pref: ``"auto"`` (CUDA if usable else CPU), ``"cuda"`` (try CUDA, still
-            fall back to CPU if the canary fails), or ``"cpu"`` (force CPU).
+            fall back to CPU if the canary fails), ``"rocm"`` (require HIP),
+            or ``"cpu"`` (force CPU). ROCm uses torch.device("cuda") internally.
+            The legacy cuda preference accepts either GPU runtime.
     """
-    if pref == "cpu":
+    pref = str(pref).lower()
+    if pref not in ("auto", "cuda", "rocm", "cpu"):
+        raise ValueError(f"Unknown device preference: {pref}")
+    if pref == "cpu" or (pref == "rocm" and gpu_backend() != "rocm"):
         return torch.device("cpu")
-    if torch.cuda.is_available() and canary_kernel_ok():
-        return torch.device("cuda")
+    try:
+        if torch.cuda.is_available() and canary_kernel_ok():
+            return torch.device("cuda")
+    except Exception as exc:
+        logging.getLogger(__name__).warning("GPU detection failed: %s", exc)
     return torch.device("cpu")
 
 
@@ -49,5 +57,6 @@ def device_banner_text(dev: torch.device) -> str:
             name = torch.cuda.get_device_name(dev)
         except Exception:
             name = "CUDA"
-        return f"Engine: CUDA ({name})"
-    return "Engine: CPU (slow) — install the cu128 PyTorch build for GPU acceleration"
+        backend = "ROCm / HIP" if gpu_backend() == "rocm" else "CUDA"
+        return f"Engine: {backend} ({name})"
+    return "Engine: CPU (slow) - install a compatible AMD ROCm or NVIDIA CUDA PyTorch build for GPU acceleration"

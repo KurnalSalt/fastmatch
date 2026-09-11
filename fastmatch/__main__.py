@@ -33,10 +33,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--device",
-        choices=["auto", "cuda", "cpu"],
+        choices=["auto", "cuda", "rocm", "cpu"],
         default="auto",
         help="Engine device preference (default: auto; canary-gated, CPU fallback).",
     )
+    p.add_argument("--smoke-test", action="store_true", help="Check the packaged GUI and CPU matcher, then exit.")
     p.add_argument(
         "--generate-sample",
         metavar="PATH",
@@ -118,6 +119,12 @@ def main(argv: list[str] | None = None) -> int:
 
     apply_theme(app, load_theme(), persist=False)
 
+    from .cpu import configure_threads, load_threads
+    configure_threads(load_threads())
+
+    from .i18n import load_language, set_language
+    set_language(load_language(), persist=False)
+
     # Resolve the image: the user's file, or None to start on an empty canvas
     # (no auto-generated demo). An image is opened later via File > Open Image…
     doc = (
@@ -131,6 +138,24 @@ def main(argv: list[str] | None = None) -> int:
     from .app import build_main_window
 
     win = build_main_window(doc, device=args.device)
+    if args.smoke_test:
+        import numpy as np
+        from .engine import Matcher
+        from .types import MatchParams
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import QWidget
+        rng = np.random.default_rng(9)
+        pixels = rng.integers(0, 256, (96, 96, 3), dtype=np.uint8)
+        template = pixels[8:24, 8:24].copy()
+        pixels[56:72, 56:72] = template
+        matcher = Matcher(device="cpu")
+        matcher.set_image(pixels)
+        matches = matcher.match(template, MatchParams(), exclude_box=(8, 8, 16, 16))
+        if not any(m.x == 56 and m.y == 56 and m.score > 0.99 for m in matches):
+            raise RuntimeError("Packaged matcher smoke test failed")
+        win._viewport.setViewport(QWidget())
+        QTimer.singleShot(300, win.close)
+        QTimer.singleShot(400, app.quit)
     win.resize(1280, 860)
     win.show()
     return app.exec()
