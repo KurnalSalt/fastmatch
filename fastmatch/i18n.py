@@ -87,6 +87,7 @@ ZH = {
     "Label": "名称", "Channel": "通道", "Selection": "选区", "Occurrences": "出现次数",
     "Score": "分数", "Orientations": "方向", "Focus mode — Space to exit": "专注模式 — 按空格键退出",
     "Running on CPU: install a compatible AMD ROCm or NVIDIA CUDA PyTorch build for GPU acceleration.": "当前使用 CPU；安装兼容的 AMD ROCm 或 NVIDIA CUDA PyTorch 可启用 GPU 加速。",
+    "ROCm is compiling GPU kernels for this selection size; the first search can take a while, later ones are fast. Please wait.": "ROCm 正在为此选区尺寸编译 GPU 内核，首次搜索可能需要一些时间，之后会很快，请稍候。",
 }
 
 def language() -> str:
