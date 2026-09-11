@@ -72,6 +72,9 @@ ZH = {
     "Select a memory entry to rename.": "请选择需要重命名的记录。", "Select mode": "框选模式", "Pan mode": "平移模式",
     "Selection set — press Run to search.": "选区已设置，点击“开始搜索”。", "Self-test": "自检", "Self-test error": "自检错误", "Threshold": "相似度阈值",
     "Toggle between Select (draw region) and Pan (drag to move).": "切换框选区域与拖动平移模式。",
+    "Toggle between Select (draw region) and Pan (drag to move). While selecting: Shift+drag adds another example of the same structure, Ctrl+drag marks something that must not match.": "切换框选区域与拖动平移模式。框选时：按住 Shift 拖框可再添加一个同类样本，按住 Ctrl 拖框可标记“不应匹配”的区域。",
+    "Clear examples": "清空样本",
+    "Remove the extra examples (Shift+drag / Ctrl+drag boxes) and search with the selection alone.": "删除额外添加的样本（Shift/Ctrl 拖出的框），只用当前选区搜索。",
     "When on, the search runs automatically as you draw a selection or change settings. When off, click Run to search.": "启用后，框选或更改设置会自动搜索；关闭后需点击“开始搜索”。",
     "Zoom to fit the whole image (F).": "缩放至完整显示图像（F）。",
     "Use the GPU when available, otherwise fall back to the CPU.": "可用时使用 GPU，否则回退 CPU。",
@@ -111,6 +114,8 @@ def tr(text: str) -> str:
             result = re.sub(r"^(\d+) matches", r"\1 个匹配", source)
         elif re.match(r"^\d+ orientations?:", source):
             result = re.sub(r"^(\d+) orientations?:", r"\1 种方向：", source)
+        elif match := re.fullmatch(r"Examples: (\d+) positive, (\d+) negative", source):
+            result = f"样本：正 {match[1]} 个，负 {match[2]} 个"
         elif source.startswith("Matches shown: "):
             result = source.replace("Matches shown: ", "显示匹配数：", 1)
         elif source.startswith("Memory (") or source.startswith("Memory —"):
