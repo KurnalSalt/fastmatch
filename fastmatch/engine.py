@@ -394,7 +394,9 @@ def _grid_nms(boxes: torch.Tensor, scores: torch.Tensor, iou_thr: float) -> torc
     if boxes.numel() == 0:
         return torch.empty(0, dtype=torch.long)
     order = torch.argsort(scores, descending=True)
-    b = boxes.detach().to("cpu", torch.float64).numpy()
+    # MPS cannot cast to float64, even when a combined .to() also requests CPU.
+    # Transfer first, then convert on the CPU for precise IoU arithmetic.
+    b = boxes.detach().cpu().to(torch.float64).numpy()
     keep = _greedy_order(b[:, 0], b[:, 1], b[:, 2], b[:, 3], order.cpu().numpy(), float(iou_thr))
     return torch.as_tensor(keep, dtype=torch.long)
 
@@ -586,6 +588,8 @@ class Matcher:
         # set_image() invalidates it. Kept as Any-typed to avoid importing the
         # feature module (and thus cv2) unless the feature path is exercised.
         self._feature_matcher = None  # type: ignore[var-annotated]
+        self._fuzzy_matcher = None
+        self._semantic_matcher = None
         # Lazily-built experimental Shazam matcher (only when method=="shazam",
         # which is disabled by default / not in the UI). It reuses the feature
         # backend's dense ORB detection + cache, so it owns no per-image state.
@@ -706,6 +710,10 @@ class Matcher:
         # matcher object itself is reused so its detector cache key still applies.
         if self._feature_matcher is not None:
             self._feature_matcher.invalidate_image()
+        if self._fuzzy_matcher is not None:
+            self._fuzzy_matcher.invalidate_image()
+        if self._semantic_matcher is not None:
+            self._semantic_matcher.invalidate_image()
 
     def _to_luminance(self, image: np.ndarray) -> np.ndarray:
         """RGB uint8 ``(H,W,3)`` -> fp32 luminance ``(H,W)`` in ``[0,1]`` (BT.601)."""
@@ -804,8 +812,13 @@ class Matcher:
         # formula (§J.2). "features" delegates to a wholly separate CPU/OpenCV
         # backend that tolerates rotation/scale/warp the conv methods cannot.
         method = params.method or "ncc"
-        if method == "features":
+        if method in ("features", "fuzzy"):
             return self._match_features(
+                template, params, exclude_box=exclude_box, mask=mask,
+                cancel=cancel, progress=progress,
+            )
+        if method == "semantic":
+            return self._match_semantic(
                 template, params, exclude_box=exclude_box, mask=mask,
                 cancel=cancel, progress=progress,
             )
@@ -1837,6 +1850,9 @@ class Matcher:
         if self._forced_core_tile is not None:
             return max(1, int(self._forced_core_tile))
 
+        if self._device.type == "mps":
+            return 512  # conservative shared-memory tiles, cancellable between slabs
+
         if self._device.type == "cuda":
             try:
                 free, _ = torch.cuda.mem_get_info()
@@ -1875,6 +1891,8 @@ class Matcher:
         many coarse candidates refines in several passes instead of OOM-/cuFFT-
         failing onto the slow full-resolution search. CPU runs in a single pass.
         """
+        if self._device.type == "mps":
+            return 16
         if self._device.type != "cuda":
             return 1 << 30  # effectively "no chunking" on CPU
         try:
@@ -1932,6 +1950,9 @@ class Matcher:
 
     def _cross_backend(self, sth: int, stw: int) -> str:
         """Resolve the cross-correlation backend for a template size (§D.2)."""
+        if self._device.type == "mps":
+            # Avoid complex FFT tensors on Metal; score using native conv2d.
+            return "spatial"
         if self._conv_backend == "spatial":
             return "spatial"
         if self._conv_backend == "fft":
@@ -2460,7 +2481,12 @@ class Matcher:
         if self._lum_u8 is None:
             raise RuntimeError("Matcher.set_image() must be called before match()")
 
-        if self._feature_matcher is None:
+        if params.method == "fuzzy":
+            if self._fuzzy_matcher is None:
+                from .fuzzy_matcher import FuzzyMatcher
+                self._fuzzy_matcher = FuzzyMatcher()
+            backend = self._fuzzy_matcher
+        elif self._feature_matcher is None:
             # Import lazily INSIDE the feature path so the cv2 dependency is only
             # required by this method (§J.3/§J.4) — `import fastmatch.engine` and
             # the conv methods stay cv2-free.
@@ -2470,6 +2496,9 @@ class Matcher:
             # The image was staged before this matcher existed; prime its cache by
             # treating the current staged luminance as the active image.
             self._feature_matcher.invalidate_image()
+            backend = self._feature_matcher
+        else:
+            backend = self._feature_matcher
 
         # rgb/ycbcr verification needs a host (H,W,3) RGB array (the feature path
         # converts it to YCbCr itself). Reconstruct it once from the staged
@@ -2487,7 +2516,7 @@ class Matcher:
                 )
             image_rgb = self._rgb_u8
 
-        return self._feature_matcher.match(
+        return backend.match(
             template,
             self._lum_u8,
             params,
@@ -2498,6 +2527,22 @@ class Matcher:
             progress=progress,
             scale_back=1,
         )
+
+    def _match_semantic(self, template, params, *, exclude_box=None, mask=None,
+                        cancel=None, progress=None):
+        from .semantic_matcher import SemanticMatcher
+
+        if self._semantic_matcher is None:
+            self._semantic_matcher = SemanticMatcher(self.effective_device)
+        # Learned features always use RGB; channel weights belong to the other
+        # matching methods. A grayscale image is replicated by the encoder.
+        if self._rgb is not None and self._rgb_u8 is None:
+            self._rgb_u8 = np.ascontiguousarray(np.stack(
+                [p[0, 0].detach().to("cpu").numpy() for p in self._rgb], axis=-1))
+        image = self._rgb_u8 if self._rgb_u8 is not None else self._lum_u8
+        return self._semantic_matcher.match(
+            template, image, params, exclude_box=exclude_box, mask=mask,
+            cancel=cancel, progress=progress)
 
     def _match_shazam(
         self,
@@ -2606,7 +2651,9 @@ class Matcher:
 
         # Move to CPU once, build the plain-data Match list (no tensors cross out).
         boxes_c = boxes.cpu().numpy()
-        scores_c = scores.cpu().numpy()
+        # Different FFT/vectorization backends can overshoot 1 by a few ulps.
+        # Preserve score ordering for NMS, but honor the public [0, 1] contract.
+        scores_c = scores.cpu().clamp(0.0, 1.0).numpy()
         scale_c = scale.cpu().numpy()
 
         # Round on the arrays, then build the Matches from plain python lists:

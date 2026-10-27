@@ -223,7 +223,7 @@ class MainWindow(QMainWindow):
         self._cursor_label = QLabel(tr("Cursor: (-, -)"), self)
         self._area_label = QLabel(tr(""), self)        # physical area of the selection
         self._count_label = QLabel(tr("0 matches"), self)
-        self._examples_label = QLabel("", self)  # multi-example counts (hidden when none)
+        self._examples_label = QLabel(tr(""), self)  # multi-example counts (hidden when none)
         self._examples_label.setVisible(False)
         self._progress = QProgressBar(self)
         self._progress.setRange(0, 100)
@@ -555,6 +555,7 @@ class MainWindow(QMainWindow):
         self._engine_group.setExclusive(True)
 
         cuda_available = resolve_device("cuda").type == "cuda"
+        mps_available = resolve_device("mps").type == "mps"
         rocm_available = cuda_available and gpu_backend() == "rocm"
         cuda_available = cuda_available and not rocm_available
         # (preference-string, label, tooltip, enabled).
@@ -566,14 +567,18 @@ class MainWindow(QMainWindow):
              else "No working CUDA device was detected on this machine."),
             ("rocm", "&ROCm (AMD GPU)",
              "Use AMD ROCm / HIP." if rocm_available else "Requires compatible AMD drivers and ROCm PyTorch."),
+            ("mps", "&MPS (Apple GPU)",
+             "Use the Apple GPU." if mps_available else "No working Apple MPS device was detected."),
             ("cpu", "C&PU",
              "Force the CPU backend (slower, but always available)."),
         )
         self._engine_actions: dict[str, QAction] = {}
         for key, label, tip in specs:
-            act = QAction(label, self, checkable=True)
+            act = QAction(tr(label), self, checkable=True)
             act.setToolTip(tr(tip))
             if key == "cuda" and not cuda_available:
+                act.setEnabled(False)
+            if key == "mps" and not mps_available:
                 act.setEnabled(False)
             if key == "rocm" and not rocm_available:
                 act.setEnabled(False)
@@ -1067,6 +1072,57 @@ class MainWindow(QMainWindow):
             self._examples_label.setText(
                 tr(f"Examples: {len(pos) + 1} positive, {len(neg)} negative"))
 
+    def _request_search(self) -> None:
+        """Search the current selection, as a multi-example search if the user
+        added Shift/Ctrl+drag example boxes to it."""
+        if self._controller is None or self._last_rect is None:
+            return
+        pos, neg = self._viewport.examples()
+        examples = (pos, neg) if (pos or neg) else None
+        self._controller.request(self._last_rect, self._params, self._last_mask, examples)
+
+    def _on_examples_changed(self, n_pos: int, n_neg: int) -> None:
+        """An example box was added (or all were cleared): update and re-search."""
+        self._update_examples_label()
+        if self._last_rect is None:
+            self.statusBar().showMessage(tr("Draw a selection box first."), 4000)
+            return
+        if self._auto_run:
+            self._request_search()
+        else:
+            self.statusBar().showMessage(tr("Selection set — press Run to search."), 4000)
+
+    def _on_example_menu(self, kind: str, number: int, global_pos) -> None:
+        """Right-click menu on a numbered example box: delete it, or all."""
+        menu = QMenu(self)
+        text = (f"Delete example #{number}" if kind == "pos"
+                else f"Delete negative example ×{number}")
+        act_delete = menu.addAction(text)
+        act_all = menu.addAction("Clear examples")
+        chosen = self._exec_menu(menu, global_pos)
+        if chosen is act_delete:
+            self._viewport.remove_example(kind, number)
+        elif chosen is act_all:
+            self._viewport.clear_examples()
+
+    @staticmethod
+    def _exec_menu(menu: "QMenu", global_pos):
+        """``menu.exec`` (a seam so tests can pick an action without a modal loop)."""
+        return menu.exec(global_pos)
+
+    def _update_examples_label(self) -> None:
+        """Refresh every view of the example set: status label, Clear action,
+        and the numbered list in the Examples panel."""
+        pos, neg = self._viewport.examples()
+        self._examples_panel.set_examples(self._viewport.template_rect(), pos, neg)
+        active = bool(pos or neg)
+        self._examples_label.setVisible(active)
+        self._act_clear_examples.setEnabled(active)
+        if active:
+            # The selection counts as the first positive example.
+            self._examples_label.setText(
+                tr(f"Examples: {len(pos) + 1} positive, {len(neg)} negative"))
+
     # ------------------------------------------------- calibration / measure
     def _enter_tool(self, mode) -> None:
         """Enter a one-shot measurement tool, remembering the mode to restore."""
@@ -1385,7 +1441,12 @@ class MainWindow(QMainWindow):
         the convolution methods run on the resolved engine device. Non-blocking
         (status-bar message), never modal.
         """
-        if method not in CONV_METHODS:  # i.e. "features"
+        if method == "semantic":
+            self.statusBar().showMessage(
+                tr(f"Semantic similarity uses local DINOv2 features — {device_banner_text(self._resolved_device)}."),
+                10000,
+            )
+        elif method not in CONV_METHODS:
             self.statusBar().showMessage(
                 tr("Feature matching runs on the CPU via OpenCV (independent of the "
                 "engine GPU device)."),

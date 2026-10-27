@@ -33,11 +33,24 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--device",
-        choices=["auto", "cuda", "rocm", "cpu"],
+        choices=["auto", "cuda", "rocm", "mps", "cpu"],
         default="auto",
         help="Engine device preference (default: auto; canary-gated, CPU fallback).",
     )
-    p.add_argument("--smoke-test", action="store_true", help="Check the packaged GUI and CPU matcher, then exit.")
+    p.add_argument(
+        "--smoke-test",
+        metavar="REPORT",
+        default=None,
+        help="Verify the packaged GUI, matching engines and semantic model; write JSON to REPORT and exit.",
+    )
+    p.add_argument(
+        "--download-semantic-model",
+        metavar="PATH",
+        nargs="?",
+        const="",
+        default=None,
+        help="Download optional DINOv2 weights to PATH (default: models/dinov2-small) and exit.",
+    )
     p.add_argument(
         "--generate-sample",
         metavar="PATH",
@@ -85,6 +98,20 @@ def main(argv: list[str] | None = None) -> int:
         argv: Optional argument vector (defaults to ``sys.argv[1:]``).
     """
     args = _build_parser().parse_args(argv)
+
+    if args.smoke_test is not None:
+        from .smoke_test import run_smoke_test
+        return run_smoke_test(args.smoke_test, args.device)
+
+    if args.download_semantic_model is not None:
+        from .semantic_matcher import download_semantic_model
+        try:
+            target = download_semantic_model(args.download_semantic_model or None)
+        except Exception as exc:
+            print(f"Semantic model download failed: {exc}", file=sys.stderr)
+            return 1
+        print(f"DINOv2 model saved to {target}. Semantic searches now run offline.")
+        return 0
 
     # Import the loader lazily so --help / arg errors don't pay import costs.
     from .loader import generate_sample, load_image
@@ -138,24 +165,6 @@ def main(argv: list[str] | None = None) -> int:
     from .app import build_main_window
 
     win = build_main_window(doc, device=args.device)
-    if args.smoke_test:
-        import numpy as np
-        from .engine import Matcher
-        from .types import MatchParams
-        from PySide6.QtCore import QTimer
-        from PySide6.QtWidgets import QWidget
-        rng = np.random.default_rng(9)
-        pixels = rng.integers(0, 256, (96, 96, 3), dtype=np.uint8)
-        template = pixels[8:24, 8:24].copy()
-        pixels[56:72, 56:72] = template
-        matcher = Matcher(device="cpu")
-        matcher.set_image(pixels)
-        matches = matcher.match(template, MatchParams(), exclude_box=(8, 8, 16, 16))
-        if not any(m.x == 56 and m.y == 56 and m.score > 0.99 for m in matches):
-            raise RuntimeError("Packaged matcher smoke test failed")
-        win._viewport.setViewport(QWidget())
-        QTimer.singleShot(300, win.close)
-        QTimer.singleShot(400, app.quit)
     win.resize(1280, 860)
     win.show()
     return app.exec()

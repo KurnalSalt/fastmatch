@@ -28,6 +28,10 @@ _os.environ.setdefault("MIOPEN_FIND_MODE", "FAST")
 # guard here is deliberate and safe.
 _PILImage.MAX_IMAGE_PIXELS = None
 
-__version__ = "0.2.1"
+__version__ = "0.3.1"
+
+from .build_info import bundled_build_info as _bundled_build_info
+
+__version__ = _bundled_build_info().get("version", __version__)
 
 __all__ = ["__version__"]

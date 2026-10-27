@@ -10,6 +10,16 @@ _language = "en"
 _reverse: dict[str, str] = {}
 _qt_translator = None
 ZH = {
+    "&MPS (Apple GPU)": "MPS（Apple GPU）(&M)",
+    "Use the Apple GPU.": "使用 Apple GPU 加速。",
+    "No working Apple MPS device was detected.": "未检测到可用的 Apple MPS 设备。",
+    "Fuzzy instance search": "模糊实例搜索",
+    "Semantic similarity": "语义相似度",
+    "Min matches": "最少匹配点",
+    "Find altered copies with RootSIFT and geometric consistency. Tolerates appearance changes and partial occlusion; requires distinctive local details. Runs on CPU.": "通过 RootSIFT 和几何一致性查找变形副本，容忍外观变化和局部遮挡，需要明显的局部细节。使用 CPU 运行。",
+    "Find visually related objects using local DINOv2 features. Results are approximate regions with the selected aspect ratio. Uses RGB and the selected engine device. Large images can take time.": "使用本地 DINOv2 特征查找视觉相关对象，结果为保持选区宽高比的近似区域。使用 RGB 与所选计算引擎，大图搜索可能需要较长时间。",
+    "Minimum independent, geometrically consistent keypoints. Lower finds weaker copies; higher reduces false matches.": "独立且几何一致的特征点数量下限。降低可找到较弱的匹配，提高可减少误匹配。",
+    "Search multiple scales (0.75×, 1×, 1.5×)": "搜索多种尺度（0.75×、1×、1.5×）",
     "Rectilinear select": "直角多边形选区",
     "Rectilinear (right-angle polygon) select: click to drop vertices (edges snap horizontal/vertical); click the first vertex or double-click / Enter to close, Esc to cancel.": "直角多边形选区：点击添加顶点，边缘自动保持水平或垂直；点击首个顶点、双击或按 Enter 闭合，按 Esc 取消。",
     "&File": "文件(&F)", "&View": "视图(&V)", "&Tools": "工具(&T)",

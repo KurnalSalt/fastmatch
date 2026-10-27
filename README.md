@@ -1,6 +1,6 @@
 # FastMatch
 
-Windows 用户：双击 `FastMatch.exe` 启动。新增 AMD ROCm 后端，安装与 RDNA 1/2/3/4 兼容范围见 [Windows / ROCm 说明](WINDOWS_ROCM.md)。ROCm 环境请使用 `requirements-app.txt` 和 `requirements-rocm-windows.txt`，避免下方旧版安装命令替换 HIP PyTorch。
+[English](README.md) | [简体中文](readme_cn.md)
 
 ![FastMatch](docs/top.png)
 
@@ -13,41 +13,150 @@ The default matcher is **normalized cross-correlation (NCC)**, but you can pick 
 different **matching method** from a dropdown — SSD for flat / low-texture
 regions, CCORR for an alternate correlation measure, or Feature matching for
 rotated / scaled / warped instances (see [Matching methods](#matching-methods)).
-The correlation methods are built on PyTorch and run on the GPU when a suitable
-CUDA build is installed, falling back transparently to CPU otherwise.
+The correlation methods are built on PyTorch and support NVIDIA CUDA, AMD ROCm,
+and Apple MPS, falling back to CPU when an accelerator is unavailable.
+For image-search-style similarity, choose **Fuzzy instance search** to find
+altered copies, or **Semantic similarity** to find visually related objects.
+See [Fuzzy and semantic search](#fuzzy-and-semantic-search).
 
 ---
 
 ## Install
 
+### Download an executable
+
+Tagged versions build standalone applications on [GitHub Releases](https://github.com/AL-255/fastmatch/releases).
+No Python installation is needed to run an extracted application. CPU and macOS
+packages include their compute runtime; CUDA/ROCm packages use your installed
+system GPU libraries (see [GPU runtime installation](#gpu-runtime-installation)).
+
+| Platform | Builds |
+|---|---|
+| Windows x64 | CPU, NVIDIA CUDA 12.8 (`-system`) |
+| Linux x64 (Ubuntu 22.04 or newer / compatible desktop) | CPU, NVIDIA CUDA 12.8 (`-system`), AMD ROCm 7.2 (`-system`) |
+| macOS Apple Silicon | Apple MPS GPU, with CPU fallback |
+
+Choose the runtime for your hardware, extract the archive, and keep the complete
+folder together. Launch `FastMatch.exe` on Windows, `FastMatch.app` on macOS, or
+`FastMatch/FastMatch` on Linux. **Auto** selects a working accelerator; **Engine**
+also offers CPU, CUDA/ROCm, and Apple MPS. CUDA/ROCm builds require compatible GPU
+drivers **and the runtime libraries below**. A driver alone is insufficient.
+macOS builds are ad-hoc signed, not notarized; Windows builds are unsigned.
+The semantic model is included and works offline.
+
+Large GPU archives are split into `.part001`, `.part002`, etc. Download **all**
+parts for your chosen build and its `.parts.json` manifest into one folder.
+The release includes helpers that join the parts and verify SHA256:
+
+```bash
+python assemble_release.py FastMatch-vX.Y.Z-linux-x64-rocm7.2-system.tar.gz.parts.json
+```
+
+On Windows, use the PowerShell helper without Python:
+
+```powershell
+./assemble_release.ps1 -Manifest FastMatch-vX.Y.Z-windows-x64-cuda-cu128-system.zip.parts.json
+```
+
+Extract the reconstructed archive afterward. Each build also includes a `.sha256`
+checksum file and its packaged-app smoke-test report. See [Release builds](docs/RELEASING.md)
+for local builds and the tag-triggered workflow.
+
+### GPU runtime installation
+
+The `-system` downloads omit vendor CUDA/ROCm SDK libraries and their kernel databases.
+They retain Python, Qt, OpenCV, PyTorch's own native libraries and required
+framework dependencies (including MAGMA/AOTriton on ROCm), and the DINOv2
+weights for offline semantic search. PyTorch's framework binaries are still
+substantial; installing a GPU driver cannot replace them. Development tools,
+PyTorch test binaries/data, and unrelated Transformers model source files are
+excluded. Each download has a `.packaging.json` size report and a `.runtime.json`
+inventory of the omitted libraries, also available inside the application as
+`_internal/runtime-requirements.json`.
+
+**NVIDIA on Linux:** install a compatible NVIDIA driver, the
+[CUDA 12.8 runtime libraries](https://docs.nvidia.com/cuda/archive/12.8.0/cuda-installation-guide-linux/index.html),
+[cuDNN 9 for CUDA 12](https://docs.nvidia.com/deeplearning/cudnn/installation/latest/linux.html),
+and [NCCL 2](https://docs.nvidia.com/deeplearning/nccl/install-guide/index.html).
+Depending on the PyTorch runtime inventory, cuSPARSELt, NVSHMEM and cuFile may
+also be needed. The tested PyTorch 2.11.0 runtime uses CUDA Toolkit **12.8.1**,
+cuDNN **9.19.0.56**, NCCL **2.28.9**, cuSPARSELt **0.7.1** and NVSHMEM **3.4.5**
+on Linux. The `.runtime.json` file records installed build-runtime package versions
+as well as library names. A newer toolkit with incompatible library SONAMEs is not a substitute.
+After registering NVIDIA's repository for your distribution, the CUDA library
+metapackage is `cuda-libraries-12-8`; install cuDNN/NCCL using their linked guides.
+If your libraries are outside the dynamic linker's standard search paths, launch
+with their directories exposed, adjusting these example paths to your install:
+
+```bash
+export LD_LIBRARY_PATH="/usr/local/cuda-12.8/lib64:/usr/local/cuda-12.8/extras/CUPTI/lib64:/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+./FastMatch/FastMatch --smoke-test smoke-cuda.json --device cuda
+./FastMatch/FastMatch
+```
+
+**NVIDIA on Windows:** install the
+[CUDA Toolkit 12.8](https://developer.nvidia.com/cuda-12-8-0-download-archive),
+[cuDNN 9 for CUDA 12](https://docs.nvidia.com/deeplearning/cudnn/installation/latest/windows.html),
+and the [Visual C++ x64 Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
+FastMatch checks `CUDA_PATH_V12_8`, `CUDA_PATH`, `CUDNN_PATH`, and `PATH` for DLL
+directories. For a custom installation, set `FASTMATCH_GPU_LIBRARY_PATH` to a
+semicolon-separated list of directories that actually contain the DLLs:
+
+```powershell
+$env:FASTMATCH_GPU_LIBRARY_PATH = 'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin;C:\gpu-libraries\cudnn\bin'
+.\FastMatch\FastMatch.exe --smoke-test smoke-cuda.json --device cuda
+.\FastMatch\FastMatch.exe
+```
+
+**AMD on Linux:** install the supported AMD driver and the full ROCm 7.2 user-space
+runtime using [AMD's installation guide](https://rocm.docs.amd.com/projects/install-on-linux/en/docs-7.2.0/install/quick-start.html)
+for your distribution/GPU. Include HIP, rocBLAS, hipBLASLt, rocFFT, MIOpen and
+RCCL, along with their GPU kernel data. With AMD's 7.2 repository configured,
+`sudo apt install rocm` installs the ROCm stack on Ubuntu. Ensure your account
+has the device access described in AMD's post-installation instructions. Then:
+
+```bash
+export LD_LIBRARY_PATH="/opt/rocm/lib:/opt/rocm/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+./FastMatch/FastMatch --smoke-test smoke-rocm.json --device rocm
+./FastMatch/FastMatch
+```
+
+Use `/opt/rocm-7.2.0` instead if your install has a versioned prefix. Keep kernel
+data beside its installed ROCm libraries; copying only the `.so` files can break
+GPU searches. macOS uses the MPS framework provided by macOS; no CUDA/ROCm setup
+is needed. If a GPU package reports a missing library, check its runtime inventory
+and library search path, or use the CPU package. CPU fallback requires the GPU
+package's native runtime to load successfully first.
+
+### Run from source
+
 FastMatch needs PySide6, NumPy, Pillow, and PyTorch. **torchvision is optional**
 (used only for a slightly faster NMS; a pure-torch fallback ships in the engine),
-and **OpenCV is optional too** — it is required *only* for the "Feature matching"
-method (see [Matching methods](#matching-methods)); the NCC / SSD / CCORR methods
+and **OpenCV is optional too** — it is required for strict feature matching and
+fuzzy instance search (see [Matching methods](#matching-methods)); the NCC / SSD / CCORR methods
 never touch it. The `requirements.txt` quickstart installs the `-headless` OpenCV
 build so it does not clash with PySide6's Qt plugins.
 
 ### CPU quickstart
 
 ```bash
+pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 ```
 
-This installs everything, including the **CPU-only** PyTorch wheel. The app is
+Installing PyTorch from its CPU index first explicitly selects the **CPU-only**
+runtime on Windows/Linux (the macOS wheel also includes MPS). The app is
 fully functional on CPU — every code path is device-agnostic — it is just
 slower for large multi-scale searches.
 
 ### GPU upgrade (CUDA / cu128)
 
-The PyPI PyTorch wheel ships **no sm_120 (Blackwell, e.g. RTX 5060) kernels**,
-so even when `torch.cuda.is_available()` returns `True` the first real kernel
-fails. To get genuine GPU acceleration, install a CUDA build from the PyTorch
-CUDA index *after* the quickstart above:
+For NVIDIA acceleration, replace the CPU runtime with the tested CUDA 12.8 build.
+A CUDA availability flag alone does not guarantee that the driver and GPU
+architecture are supported; FastMatch also executes a canary kernel at launch.
 
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu128
-# cu129 is an alternative if cu128 is unavailable for your platform:
-# pip install torch --index-url https://download.pytorch.org/whl/cu129
+pip install --force-reinstall torch==2.11.0 --index-url https://download.pytorch.org/whl/cu128
 ```
 
 Verify the GPU build is active:
@@ -63,6 +172,13 @@ python -c "import torch; print(torch.cuda.is_available())"
 FastMatch never assumes CUDA exists: it detects the device at runtime with both
 `torch.cuda.is_available()` and a launch-time **canary kernel**, so a broken or
 mismatched CUDA wheel cleanly degrades to CPU rather than crashing.
+
+For AMD on Linux, install the ROCm runtime. Apple Silicon uses MPS from the
+normal macOS PyTorch wheel, with a separate canary probe:
+
+```bash
+pip install --force-reinstall torch==2.11.0 --index-url https://download.pytorch.org/whl/rocm7.2
+```
 
 ---
 
@@ -81,15 +197,19 @@ python -m fastmatch
 python -m fastmatch --generate-sample sample.png --w 12000 --h 12000
 python -m fastmatch sample.png
 
-# Force a specific device (default is "auto": CUDA if usable, else CPU)
+# Force a device (auto tries CUDA/ROCm, then Apple MPS, then CPU)
 python -m fastmatch path/to/image.png --device cpu
 python -m fastmatch path/to/image.png --device cuda
+python -m fastmatch path/to/image.png --device rocm
+python -m fastmatch path/to/image.png --device mps
 python -m fastmatch path/to/image.png --device auto
 ```
 
 If no image path is given, FastMatch opens with an **empty canvas** (no
 auto-generated demo) — load an image from *File ▸ Open Image…*. `--device`
-accepts `auto`, `cuda`, or `cpu`. `cuda` still falls back to CPU if the canary
+accepts `auto`, `cuda`, `rocm`, `mps`, or `cpu`. CUDA/ROCm and Apple MPS are probed
+with real kernels before use; an unavailable accelerator falls back to CPU.
+`cuda` still falls back to CPU if the canary
 kernel fails. `--generate-sample <path>` writes a synthetic image (default
 `12000x12000`, override with `--w` / `--h`) with a set of known motif stamps and
 exits; load that file separately to search it.
@@ -107,11 +227,11 @@ exits; load that file separately to search it.
 | **Run** button / **Auto Run** checkbox | With *Auto Run* on (default) the search runs whenever you draw a selection or change a setting. Turn it off to stage the selection + parameters and trigger a single search with **Run** (handy when each run is expensive). |
 | **Channel dropdown** | The colour space the matcher scores in: `luminance` (a single BT.601 luma plane), `rgb`, or `ycbcr`. The two colour modes are **multi-channel** (each channel correlated separately) and expose **per-channel weight sliders** (R,G,B or Y,Cb,Cr) — see [Channel modes & weights](#channel-modes--weights). |
 | Release a new selection | Runs the search (if Auto Run is on); any in-flight search is **auto-cancelled** (latest-wins). |
-| **Method dropdown** | Pick the matching method (NCC / SSD / CCORR / Feature matching). Changing it **re-runs** the search on the current selection. See [Matching methods](#matching-methods). |
+| **Method dropdown** | Pick NCC / SSD / CCORR, Fuzzy instance search, Semantic similarity, or Strict feature matching. Changing it **re-runs** the search on the current selection. See [Matching methods](#matching-methods). |
 | **Rotation / Flipping checkboxes** | Also search the template under quarter-turn rotations and/or mirror reflections. Changing either **re-runs** the search. See [Orientation search](#orientation-search). |
 | **Threshold slider** | **Live-filters** the displayed results — no re-run (works for every method). |
 | **View ▸ Match boxes** menu | Configure the overlay box outlines: **Line width** (1–6 px, zoom-independent) and **XOR with background** (invert the outline against whatever is underneath so it stays visible on any background). |
-| **Engine** menu | Switch the compute backend on the fly: **Auto (prefer GPU)**, **CUDA (GPU)**, or **CPU**. CUDA is greyed out when no working GPU is detected. Switching rebuilds the engine on the new device, updates the status banner, re-gates the GPU-only multi-scale search, and re-runs the current selection. |
+| **Engine** menu | Switch between **Auto (prefer GPU)**, **CUDA (NVIDIA GPU)** or **ROCm (AMD GPU)** according to the installed runtime, **MPS (Apple GPU)**, and **CPU**. Unavailable accelerators are greyed out. Switching rebuilds the engine, updates the status banner and multi-scale controls, and re-runs the current selection. |
 | **Theme** menu | Switch the application look: **System** (follow the desktop), **Light**, or **Dark**. The whole UI and the image canvas re-theme instantly, and the choice is remembered for next launch. |
 | **Tools** menu | **Calibrate scale** and **Measure distance** (physical units). See [Measurement & calibration](#measurement--calibration). |
 | **Add to Memory** | Save the current selection + all current matches as an entry in the Memory list. See [Saved-match Memory](#saved-match-memory). |
@@ -157,7 +277,9 @@ slider stays a live, no-re-run client-side filter for every method.
 | **NCC** (default) | Normalized cross-correlation (CCOEFF). Subtracts the mean and divides by per-window variance, so it is **illumination-robust**. | **Textured, aligned, same-scale** instances — the general default. Needs some internal texture to normalize against. | **GPU** (CPU fallback) |
 | **SSD** | Normalized squared difference: `1 − RMSE` of the pixel-wise difference. | **Flat / low-texture / exact-appearance** regions, where NCC's variance normalization is unstable (or rejects the template outright). **Not** illumination-invariant — use it when brightness is consistent. | **GPU** (CPU fallback) |
 | **CCORR** | Cosine cross-correlation (CCORR_NORMED) — an alternate correlation measure that does not subtract the mean. | A correlation alternative to NCC; useful as a cross-check when NCC behaves oddly. | **GPU** (CPU fallback) |
-| **Feature matching** | Dense ORB/AKAZE/SIFT keypoints **propose** a candidate at every repeated copy (one correspondence per copy — not the Lowe ratio test), and each candidate is **verified by appearance** (normalized cross-correlation). | **Rotated / scaled / perspective-warped** instances that the template (window-based) methods miss — and a feature-driven way to **reproduce the correlation methods' matches** on repetitive content. | **CPU**, via OpenCV |
+| **Fuzzy instance search** | RootSIFT descriptors, repeated-instance retrieval, and per-instance RANSAC geometric verification. Scores descriptor similarity, keypoint coverage, and geometric consistency, without a pixel-correlation gate. | **Blurred / compressed / recoloured / partly occluded** copies with distinctive local details, including rotation, scale and perspective changes. | **CPU**, via OpenCV |
+| **Semantic similarity** | Pretrained DINOv2 embeddings and cosine similarity over overlapping image windows, with local refinement. | **Visually related objects with different appearances**, including regions that have no matching keypoints. | **GPU or CPU**, via PyTorch; optional local model |
+| **Strict feature matching** | Dense ORB/AKAZE/SIFT keypoints **propose** a candidate at every repeated copy (one correspondence per copy — not the Lowe ratio test), and each candidate is **verified by appearance** (normalized cross-correlation). | **Rotated / scaled / perspective-warped** copies whose pixels still correlate strongly after alignment. | **CPU**, via OpenCV |
 
 Notes:
 
@@ -188,8 +310,9 @@ Notes:
 
 ## Channel modes & weights
 
-The **Channel mode** dropdown chooses the colour space every method scores in,
-and applies to **all four methods**:
+The **Channel mode** dropdown chooses the matching colour space,
+and applies to **NCC / SSD / CCORR, strict feature matching, and fuzzy instance search**.
+Semantic similarity always uses RGB learned features and disables these controls.
 
 | Mode | What it matches on |
 |---|---|
@@ -234,7 +357,7 @@ orientation only. Two checkboxes in the params panel widen the search to the
 | off | on  | upright + horizontal / vertical mirror |
 | on  | on  | all 8 (rotations, mirrors, and diagonal reflections) |
 
-**All four methods honor these checkboxes.** The correlation methods
+**All methods honor these checkboxes.** The correlation methods
 (NCC / SSD / CCORR) re-run their score-map search once per active orientation
 and keep the best one per location; feature matching proposes the template under
 each active orientation, appearance-verifies each instance, and classifies the
@@ -243,6 +366,65 @@ under, so a hit can be a rotated or mirrored copy of your selection. With both
 boxes off, behaviour is exactly the upright-only search described above (no
 extra cost). Changing either checkbox re-runs the search on your current
 selection; the threshold slider stays a live, no-re-run filter.
+Fuzzy search classifies the recovered geometric transform; semantic search
+compares embeddings of the selected template orientations and adjusts window
+aspect ratios for quarter turns.
+
+---
+
+## Fuzzy and semantic search
+
+These are separate retrieval modes: finding an altered copy and finding a
+different but visually related object need different evidence.
+
+- **Fuzzy instance search** uses [RootSIFT](https://www.robots.ox.ac.uk/~vgg/publications/2012/Arandjelovic12/arandjelovic12.pdf)
+  with geometric verification. Image descriptors query the template index, so
+  repeated copies do not compete for a fixed nearest-neighbour quota. **Min matches**
+  controls independent keypoint support; the threshold filters a combined
+  descriptor/geometry score. Use luminance when recolouring should be tolerated;
+  RGB/YCbCr weights add colour-histogram similarity. It infers scale and needs
+  distinctive details; plain, textureless shapes may yield no matches.
+- **Semantic similarity** uses local [DINOv2-small](https://github.com/facebookresearch/dinov2)
+  weights. It ranks overlapping windows, refines promising positions, and
+  merges overlaps. Multi-scale search also works on CPU. Results are approximate
+  regions based on the selection's size and aspect ratio, rather than object
+  segmentations. Very large images with small selections require many encoder
+  calls and can be slow; cancellation and progress remain available. Domain
+  performance depends on the pretrained features.
+- Scores are similarities, **not probabilities**, and differ between methods.
+  Start around `0.5` and adjust the threshold. Positive examples are searched
+  separately; negative examples use the chosen retrieval evidence rather than
+  a pixel-correlation filter. Both modes support selection masks, source
+  exclusion, result limits, orientation search, and saved Memory entries.
+
+Fuzzy search works with the normal quickstart. To enable semantic search:
+
+```bash
+pip install -r requirements-semantic.txt
+python -m fastmatch --download-semantic-model
+```
+
+The explicit download stores model data in `models/dinov2-small` (ignored by Git).
+Searches then run **offline**; no image is uploaded and searching never downloads
+weights. The method is greyed out until dependencies and weights are present.
+Restart the app after setup. For another location, download and launch with:
+
+```bash
+python -m fastmatch --download-semantic-model /path/to/dinov2-small
+FASTMATCH_SEMANTIC_MODEL=/path/to/dinov2-small python -m fastmatch
+```
+
+Reproducible CPU comparisons:
+
+```bash
+python scripts/fuzzy_eval.py
+python scripts/feature_eval.py --method fuzzy
+```
+
+The default synthetic altered-copy scene recovers **4/4 copies with no false
+positives** (the strict matcher recovers 3/4, missing 50% occlusion). The separate
+rotation/scale scene recovers **36/36 with no false positives**. These controlled
+scenes are regression checks, not guarantees for arbitrary images.
 
 ---
 
@@ -357,7 +539,7 @@ FastMatch ships a built-in correctness check:
   Truly oversized images are refused up front with a dialog rather than being
   allowed to OOM-kill the process.
 
-- **Out of memory on the GPU** — the engine starts conservatively (1024x1024
+- **Out of memory on the GPU** — the correlation engine starts conservatively (1024x1024
   compute tiles) and, on `OutOfMemoryError`, **auto-degrades** along a ladder:
   1024 → 512 tile → fewer scales → CPU fallback, surfacing a message at each
   rung. You do not need to tune anything manually.

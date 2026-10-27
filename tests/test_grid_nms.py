@@ -87,7 +87,7 @@ def test_orientation_nms_matches_pairwise_reference():
               w=int(w), h=int(h), score=float(rng.random()), scale=1.0)
         for w, h in rng.choice([10, 16, 33], (800, 2))
     ]
-    params = MatchParams(nms_iou=0.3)
+    params = MatchParams(nms_iou=0.3, max_results=10_000)
     ordered = sorted(pooled, key=lambda m: m.score, reverse=True)
 
     def iou(a, b):
