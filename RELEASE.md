@@ -1,4 +1,4 @@
-# Desktop releases / ?????
+# Desktop releases / 桌面发布版
 
 See [v0.3.1-desktop.1 release notes](docs/releases/v0.3.1-desktop.1.md) for downloads,
 transparent-image fixes, supported platforms and limitations.
@@ -9,8 +9,8 @@ source regressions and a frozen application smoke test, including transparent
 image loading, GUI startup, correlation, fuzzy search and offline DINOv2 inference.
 A tagged release is published only after all four builds pass.
 
-- Language switches between English and ???? without reopening the image.
-- Engine ? CPU threads configures PyTorch and OpenCV computation.
+- Language switches between English and 简体中文 without reopening the image.
+- Engine → CPU threads configures PyTorch and OpenCV computation.
 - Max results = Unlimited (0) removes the result cap; positive values apply a cap.
 - Transparent images use a contrasting black/white matte shared by display and
   matching. Pixel dimensions and opaque colors remain unchanged.
