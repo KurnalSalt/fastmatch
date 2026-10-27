@@ -19,6 +19,9 @@ def test_language_roundtrip_preserves_state():
         i18n.set_language("zh", persist=False)
         assert window._params_panel._run_button.text() == "开始搜索"
         assert window._params_panel._max_results.text() == "不限"
+        methods = window._params_panel._method
+        assert methods.itemText(methods.findData("semantic")).startswith("语义相似度")
+        assert methods.itemText(methods.findData("fuzzy")).startswith("模糊实例搜索")
         assert i18n.tr("Matches shown: 123") == "显示匹配数：123"
         assert window._params_panel.current_params() == before
         i18n.set_language("en", persist=False)

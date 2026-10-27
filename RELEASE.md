@@ -1,6 +1,6 @@
 # Desktop releases / 桌面发布版
 
-See [v0.3.1-desktop.1 release notes](docs/releases/v0.3.1-desktop.1.md) for downloads,
+See [v0.3.1-desktop.2 release notes](docs/releases/v0.3.1-desktop.2.md) for downloads,
 transparent-image fixes, supported platforms and limitations.
 
 The Desktop release builds workflow builds Windows x64 CPU, Windows x64 bundled
@@ -29,7 +29,7 @@ python -m pip install -r requirements-build.txt
 # Windows AMD: install requirements-rocm-windows.txt, then requirements-build.txt.
 # Intel Mac: install packaging/requirements-build-intel.txt instead.
 python -m fastmatch --download-semantic-model
-python scripts/build_release.py --label v0.3.1-desktop.1 --backend cpu
+python scripts/build_release.py --label v0.3.1-desktop.2 --backend cpu
 ```
 
 Use backend `mps` on Apple Silicon or `rocm7.2.1-bundled` on Windows AMD.
