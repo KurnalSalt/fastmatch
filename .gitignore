@@ -20,8 +20,8 @@ htmlcov/
 logs/
 downloads/
 upstream-work/
-release/
-releases/
+/release/
+/releases/
 /FastMatch.exe
 venv/
 env/
